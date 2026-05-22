@@ -175,6 +175,15 @@ make build-heroku-24
 make build-heroku-26
 ```
 
+You can also use the generic target `build-heroku-XXXX` and inject the stack
+version at runtime:
+
+```bash
+HEROKU_STACK_VERSION=26 make build-heroku-XXXX
+HEROKU_STACK_VERSION=24 make build-heroku-XXXX
+HEROKU_STACK_VERSION=22 make build-heroku-XXXX
+```
+
 ## Upgrading dependencies
 
 Process docs for buildpack maintainers.
