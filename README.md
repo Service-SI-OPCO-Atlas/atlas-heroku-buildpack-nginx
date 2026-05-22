@@ -99,6 +99,82 @@ $ cp bin/nginx-$STACK bin/nginx
 $ FORCE=1 bin/start-nginx
 ```
 
+### Generate build archives (manual commands)
+
+If you want explicit commands (without `make`) to generate each archive file:
+
+Heroku-22 (amd64):
+
+```bash
+docker run --rm --platform linux/amd64 \
+	-e STACK=heroku-22 \
+	-v "$PWD:/buildpack" \
+	-w /buildpack \
+	heroku/heroku:22-build \
+	scripts/build_nginx /buildpack/nginx-heroku-22.tgz
+```
+
+Heroku-24 (amd64):
+
+```bash
+docker run --rm --platform linux/amd64 \
+	-e STACK=heroku-24 \
+	-v "$PWD:/buildpack" \
+	-w /buildpack \
+	heroku/heroku:24-build \
+	scripts/build_nginx /buildpack/nginx-heroku-24-amd64.tgz
+```
+
+Heroku-24 (arm64):
+
+```bash
+docker run --rm --platform linux/arm64 \
+	-e STACK=heroku-24 \
+	-v "$PWD:/buildpack" \
+	-w /buildpack \
+	heroku/heroku:24-build \
+	scripts/build_nginx /buildpack/nginx-heroku-24-arm64.tgz
+```
+
+Heroku-26 (amd64):
+
+```bash
+docker run --rm --platform linux/amd64 \
+	-e STACK=heroku-26 \
+	-v "$PWD:/buildpack" \
+	-w /buildpack \
+	heroku/heroku:26-build \
+	scripts/build_nginx /buildpack/nginx-heroku-26-amd64.tgz
+```
+
+Heroku-26 (arm64):
+
+```bash
+docker run --rm --platform linux/arm64 \
+	-e STACK=heroku-26 \
+	-v "$PWD:/buildpack" \
+	-w /buildpack \
+	heroku/heroku:26-build \
+	scripts/build_nginx /buildpack/nginx-heroku-26-arm64.tgz
+```
+
+Generated files are created at the repository root. You can verify one archive with:
+
+```bash
+tmp=$(mktemp -d)
+tar -xzf nginx-heroku-26-amd64.tgz -C "$tmp"
+file "$tmp/nginx" "$tmp/nginx-debug"
+```
+
+For convenience, equivalent shortcuts also exist in the `Makefile`:
+
+```bash
+make build
+make build-heroku-22
+make build-heroku-24
+make build-heroku-26
+```
+
 ## Upgrading dependencies
 
 Process docs for buildpack maintainers.

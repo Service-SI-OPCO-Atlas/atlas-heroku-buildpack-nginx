@@ -9,6 +9,24 @@ set -o pipefail
 # fail harder
 set -eu
 
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <output-tarball>" >&2
+  exit 1
+fi
+
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "Error: run this script inside a Linux Heroku stack image." >&2
+  exit 1
+fi
+
+caller_dir=$PWD
+output_tarball=$1
+if [[ "$output_tarball" = /* ]]; then
+  output_path="$output_tarball"
+else
+  output_path="$caller_dir/$output_tarball"
+fi
+
 NGINX_VERSION=${NGINX_VERSION-1.28.3}
 HEADERS_MORE_VERSION=${HEADERS_MORE_VERSION-0.39}
 UUID4_VERSION=${UUID4_VERSION-f8f7ff44e6a8c6cf75232ae4b63d011f2f3b34c1}
@@ -18,6 +36,12 @@ headers_more_nginx_module_url=https://github.com/openresty/headers-more-nginx-mo
 uuid4_url=https://github.com/cybozu/nginx-uuid4-module/archive/${UUID4_VERSION}.tar.gz
 
 temp_dir=$(mktemp -d /tmp/nginx.XXXXXXXXXX)
+
+compiler_version=$({ ${CC:-cc} --version 2>/dev/null || true; } | head -n 1)
+use_clang_compat_flag=false
+if echo "$compiler_version" | grep -qi clang; then
+  use_clang_compat_flag=true
+fi
 
 trap popd EXIT
 pushd "$temp_dir"
@@ -40,9 +64,8 @@ configure_opts=(
   --add-module="${temp_dir}/nginx-${NGINX_VERSION}/headers-more-nginx-module-${HEADERS_MORE_VERSION}"
   --add-module="${temp_dir}/nginx-${NGINX_VERSION}/nginx-uuid4-module-${UUID4_VERSION}"
 )
-if [[ $STACK == "heroku-22" ]]; then
-  # we used to build our own PCRE 8.x, and when moving to dynamic linking, we had to ensure all existing regexes in config files continued to work, so we enforced libpcre3 (8.x) usage instead of the newer PCRE2 (10.x), which has stricter validation for certain patterns (example: /[\w-.]/ is not allowed in PCRE2)
-  # but for any newer stacks, we can use the more modern PCRE2
+if [[ ${STACK:-} == "heroku-22" ]]; then
+  # Keep libpcre3 behavior on heroku-22 for backward-compatible regex handling.
   configure_opts+=(
     --without-pcre2
   )
@@ -50,17 +73,29 @@ fi
 
 # This will build `nginx`
 (
+  : "${CFLAGS:=}"
+  : "${CXXFLAGS:=}"
+  if [[ "$use_clang_compat_flag" == true ]]; then
+    export CFLAGS="$CFLAGS -Wno-error=gnu-folding-constant"
+    export CXXFLAGS="$CXXFLAGS -Wno-error=gnu-folding-constant"
+  fi
   cd "nginx-${NGINX_VERSION}"
   ./configure \
     --prefix=/tmp/nginx \
     "${configure_opts[@]}"
   make install
   # strip binary (but not the nginx-debug variant further down)
-  find /tmp/nginx -type f \( -executable -o -name '*.a' \) -exec sh -c "file -i '{}' | grep -Eq 'application/x-(archive|(pie-)?executable|sharedlib); charset=binary'" \; -print | xargs strip --strip-unneeded
+  find /tmp/nginx -type f \( -perm /111 -o -name '*.a' \) -exec sh -c "file -i '{}' | grep -Eq 'application/x-(archive|(pie-)?executable|sharedlib); charset=binary'" \; -print | xargs strip --strip-unneeded
 )
 
 # This will build `nginx-debug`
 (
+  : "${CFLAGS:=}"
+  : "${CXXFLAGS:=}"
+  if [[ "$use_clang_compat_flag" == true ]]; then
+    export CFLAGS="$CFLAGS -Wno-error=gnu-folding-constant"
+    export CXXFLAGS="$CXXFLAGS -Wno-error=gnu-folding-constant"
+  fi
   cd "nginx-${NGINX_VERSION}"
   ./configure \
     --with-debug \
@@ -71,7 +106,28 @@ fi
 
 release_dir=$(mktemp -d /tmp/nginx.XXXXXXXXXX)
 
+if [[ ! -f /tmp/nginx/sbin/nginx ]]; then
+  echo "Error: /tmp/nginx/sbin/nginx not found" >&2
+  exit 1
+fi
+if [[ ! -f /tmp/nginx-debug/sbin/nginx ]]; then
+  echo "Error: /tmp/nginx-debug/sbin/nginx not found" >&2
+  exit 1
+fi
+if [[ ! -f /tmp/nginx/conf/mime.types ]]; then
+  echo "Error: /tmp/nginx/conf/mime.types not found" >&2
+  exit 1
+fi
+
 mv /tmp/nginx/sbin/nginx "$release_dir/nginx"
 mv /tmp/nginx-debug/sbin/nginx "$release_dir/nginx-debug"
 mv /tmp/nginx/conf/mime.types "$release_dir/mime.types"
-tar -zcvf "$1" -C "$release_dir" .
+
+tar -zcvf "$output_path" -C "$release_dir" .
+
+if [[ ! -f "$output_path" ]]; then
+  echo "Error: archive was not created: $output_path" >&2
+  exit 1
+fi
+
+echo "Success: generated $output_path"
