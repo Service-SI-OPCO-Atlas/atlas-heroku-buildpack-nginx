@@ -1,4 +1,4 @@
-.PHONY: build build-heroku-22 build-heroku-24 build-heroku-26 build-heroku-XXXX shell
+.PHONY: build build-heroku-22 build-heroku-24 build-heroku-26 build-heroku-XX shell
 
 HEROKU_STACK_VERSION ?=
 
@@ -24,10 +24,10 @@ shell:
 	@echo "Opening heroku-26 shell..."
 	@docker run -v $(shell pwd):/buildpack --rm -it -e "STACK=heroku-26" -e "PORT=5000" -w /buildpack heroku/heroku:26-build bash
 
-build-heroku-XXXX:
+build-heroku-XX:
 	@if [ -z "$(HEROKU_STACK_VERSION)" ]; then \
 		echo "HEROKU_STACK_VERSION is required."; \
-		echo "Usage: HEROKU_STACK_VERSION=26 make build-heroku-XXXX"; \
+		echo "Usage: HEROKU_STACK_VERSION=26 make build-heroku-XX"; \
 		exit 1; \
 	fi
 	@echo "Building nginx in Docker for heroku-$(HEROKU_STACK_VERSION) (amd64)..."
